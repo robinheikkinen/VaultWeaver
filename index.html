@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VaultWeaver</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%90%3C/text%3E%3C/svg%3E">
+<style>
+/* Ljust läge (standard): Warm Graphite. Mörkt läge (prefers-color-scheme): Charcoal + Teal. */
+:root{
+  --bg:#f8f4ee; --bg-grad:#fffaf3; --surface:#ffffff; --surface-2:#f0e9df;
+  --border:#e6ddd0; --border-soft:#eee6d9;
+  --text:#1e1a14; --text-dim:#7a6d5c; --text-faint:#a4967f;
+  --accent:#c94f1c; --accent-hover:#a83f15; --accent-soft:#fbe7db; --accent-ink:#fff3ec;
+  --green:#15803d; --green-bg:#eafbf0; --green-border:#b7e4c7;
+  --red:#b3261e; --red-bg:#fdecea; --red-border:#f3c6c2;
+  --yellow:#92620a; --yellow-bg:#fdf3df; --yellow-border:#f0d9a8;
+  --radius:12px; --radius-sm:8px;
+  --shadow:0 1px 2px rgba(20,15,5,.08), 0 8px 24px -12px rgba(20,15,5,.16);
+}
+@media(prefers-color-scheme:dark){
+  :root{
+    --bg:#0d1117; --bg-grad:#142329; --surface:#151b23; --surface-2:#1c242e;
+    --border:#232b35; --border-soft:#1f262f;
+    --text:#e6edf3; --text-dim:#8b98a5; --text-faint:#576372;
+    --accent:#2dd4bf; --accent-hover:#22b8a5; --accent-soft:#0f2c28; --accent-ink:#04211d;
+    --green:#22c55e; --green-bg:#0c2318; --green-border:#1f5138;
+    --red:#f66565; --red-bg:#2a1115; --red-border:#6b2530;
+    --yellow:#f5b942; --yellow-bg:#2a2110; --yellow-border:#5c4a1c;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.45);
+  }
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+     background:radial-gradient(1200px 500px at 50% -10%,var(--bg-grad),var(--bg) 60%);
+     color:var(--text);min-height:100vh;padding:40px 16px 64px;line-height:1.6;
+     -webkit-font-smoothing:antialiased}
+.wrap{max-width:900px;margin:0 auto}
+
+.masthead{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+.mark{width:42px;height:42px;border-radius:11px;background:var(--accent);
+      display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex:none;box-shadow:var(--shadow)}
+h1{font-size:1.5rem;font-weight:700;letter-spacing:-.01em}
+.subtitle{color:var(--text-dim);font-size:.88em;margin:14px 0 16px;max-width:60ch}
+.trust-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:32px}
+.trust-pill{display:inline-flex;align-items:center;gap:6px;font-size:.75em;font-weight:600;
+            color:var(--text-dim);background:var(--surface);border:1px solid var(--border-soft);
+            padding:5px 10px;border-radius:99px}
+
+.drop-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.drop-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:32px 20px;text-align:center;
+           cursor:pointer;transition:.2s ease;background:var(--surface);position:relative;min-height:150px;
+           display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);background:var(--accent-soft);
+           transform:translateY(-1px);box-shadow:var(--shadow)}
+.drop-zone.loaded{border-color:var(--green);border-style:solid;background:var(--green-bg)}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-icon{font-size:2.2rem;user-select:none;transition:.2s}
+.drop-zone:hover .drop-icon,.drop-zone.drag-over .drop-icon{transform:scale(1.12)}
+.drop-label{font-weight:600;font-size:.95em}
+.drop-sub{font-size:.78em;color:var(--text-faint)}
+.file-name{font-size:.82em;color:var(--green);word-break:break-all;max-width:100%;margin-top:2px;font-weight:600}
+.file-count{font-size:.75em;color:var(--green);opacity:.75}
+
+.options{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius);
+         padding:20px;margin-bottom:20px;display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.opt-group{display:flex;flex-direction:column;gap:7px}
+label{font-size:.76em;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+select,input[type=text]{background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:9px 12px;border-radius:var(--radius-sm);font-size:.9em;width:100%;transition:border-color .15s}
+select:focus,input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.checkbox-row{display:flex;align-items:center;gap:8px;margin-top:4px}
+.checkbox-row input{width:auto;accent-color:var(--accent)}
+.checkbox-row span{font-size:.88em;color:var(--text-dim)}
+
+.btn-merge{width:100%;padding:14px;background:var(--accent);color:var(--accent-ink);border:none;
+           border-radius:var(--radius-sm);font-size:1rem;font-weight:700;cursor:pointer;
+           transition:.15s ease;margin-bottom:8px;box-shadow:var(--shadow)}
+.btn-merge:hover:not(:disabled){background:var(--accent-hover);transform:translateY(-1px)}
+.btn-merge:active:not(:disabled){transform:translateY(0)}
+.btn-merge:disabled{background:var(--surface-2);color:var(--text-faint);opacity:.7;
+           cursor:not-allowed;box-shadow:none}
+.btn-download{width:100%;padding:11px;background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);
+              border-radius:var(--radius-sm);font-size:.9rem;font-weight:700;cursor:pointer;
+              text-align:center;text-decoration:none;display:none;margin-bottom:8px;transition:.15s}
+.btn-download:hover{background:var(--green-border);border-color:var(--green)}
+.btn-reset{width:100%;padding:9px;background:transparent;color:var(--text-faint);border:1px solid var(--border-soft);
+           border-radius:var(--radius-sm);font-size:.82rem;cursor:pointer;display:none;margin-bottom:8px;transition:.15s}
+.btn-reset:hover{background:var(--surface);color:var(--text-dim);border-color:var(--border)}
+
+.status{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-sm);
+        padding:12px 16px;margin-bottom:20px;font-size:.88em;color:var(--text-dim);display:none}
+.status.ok{color:var(--green);background:var(--green-bg);border-color:var(--green-border)}
+.status.err{color:var(--red);background:var(--red-bg);border-color:var(--red-border)}
+
+.cards{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:28px}
+.card{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius);
+      padding:15px 18px;flex:1;min-width:100px;text-align:center;transition:.15s}
+.card:hover{border-color:var(--border);transform:translateY(-1px)}
+.card-val{font-size:1.8rem;font-weight:800;letter-spacing:-.01em}
+.card-lbl{font-size:.71rem;color:var(--text-dim);margin-top:4px;font-weight:600;
+          text-transform:uppercase;letter-spacing:.04em}
+
+h2{font-size:1.05rem;font-weight:700;margin:30px 0 12px;border-bottom:1px solid var(--border-soft);padding-bottom:8px}
+.alert-box{background:var(--red-bg);border:1px solid var(--red-border);border-radius:var(--radius);
+           padding:18px;margin-bottom:24px}
+.toolbar{display:flex;gap:8px;align-items:center;margin:10px 0 8px;flex-wrap:wrap}
+.toolbar input[type=text]{max-width:220px}
+button.fbtn{background:var(--surface-2);color:var(--text);border:1px solid transparent;padding:6px 12px;
+            border-radius:99px;cursor:pointer;font-size:.78em;font-weight:600;transition:.15s}
+button.fbtn:hover{background:var(--border)}
+button.fbtn.active{background:var(--accent);color:var(--accent-ink)}
+
+details summary::-webkit-details-marker{display:none}
+.sdef{cursor:pointer;padding:10px 14px;background:var(--surface);border:1px solid var(--border-soft);
+      border-radius:var(--radius-sm);list-style:none;
+      display:flex;justify-content:space-between;align-items:center;user-select:none;transition:.15s}
+.sdef:hover{background:var(--surface-2)}
+details[open] .sdef{border-radius:var(--radius-sm) var(--radius-sm) 0 0;background:var(--surface-2)}
+.sred{cursor:pointer;padding:8px 12px;list-style:none;user-select:none}
+.dbody{padding:6px 14px 12px;border:1px solid var(--border-soft);border-top:none;
+       border-radius:0 0 var(--radius-sm) var(--radius-sm);overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.85em}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--border-soft);vertical-align:top}
+th{color:var(--text-faint);font-size:.72em;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.muted{color:var(--text-faint)} .sm{font-size:.8em} .center{text-align:center;padding:18px;color:var(--text-faint)}
+code{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:.87em;color:var(--text-dim)}
+.lnk{color:var(--accent);text-decoration:none} .lnk:hover{text-decoration:underline}
+.hidden{display:none!important}
+.ntbl{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius);overflow:hidden}
+.footer{margin-top:44px;padding:16px 18px;background:var(--surface);border:1px solid var(--border-soft);
+        border-radius:var(--radius);color:var(--text-faint);font-size:.82em}
+.generic-opts{display:none;grid-column:1/-1;background:var(--bg);border-radius:var(--radius-sm);
+              padding:14px;border:1px solid var(--border)}
+@media(max-width:600px){
+  .drop-row{grid-template-columns:1fr}
+  .options{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="masthead">
+    <div class="mark">🔐</div>
+    <h1>VaultWeaver</h1>
+  </div>
+  <p class="subtitle">
+    Allt körs lokalt i din webbläsare — inga filer lämnar din dator.
+    Fungerar med Bitwarden / Vaultwarden och godtycklig JSON.
+  </p>
+  <div class="trust-row">
+    <span class="trust-pill">🚫 Inga nätverksanrop</span>
+    <span class="trust-pill">📴 Fungerar offline</span>
+    <span class="trust-pill">🙈 Känsliga fält aldrig i rapporten</span>
+  </div>
+
+  <!-- Drop zones -->
+  <div class="drop-row">
+    <div class="drop-zone" id="zone1" ondragover="onDragOver(event,1)" ondragleave="onDragLeave(1)" ondrop="onDrop(event,1)">
+      <input type="file" accept=".json" onchange="onFileInput(event,1)">
+      <div class="drop-icon" id="icon1">📂</div>
+      <div class="drop-label">Fil 1 — dra hit eller klicka</div>
+      <div class="drop-sub">Primär / äldre export</div>
+      <div class="file-name" id="fname1"></div>
+      <div class="file-count" id="fcount1"></div>
+    </div>
+    <div class="drop-zone" id="zone2" ondragover="onDragOver(event,2)" ondragleave="onDragLeave(2)" ondrop="onDrop(event,2)">
+      <input type="file" accept=".json" onchange="onFileInput(event,2)">
+      <div class="drop-icon" id="icon2">📂</div>
+      <div class="drop-label">Fil 2 — dra hit eller klicka</div>
+      <div class="drop-sub">Nyare export / uppdaterad fil</div>
+      <div class="file-name" id="fname2"></div>
+      <div class="file-count" id="fcount2"></div>
+    </div>
+  </div>
+
+  <!-- Options -->
+  <div class="options">
+    <div class="opt-group">
+      <label>Konfliktpolicy</label>
+      <select id="policy">
+        <option value="prefer_newer" selected>prefer_newer — ta det nyast ändrade</option>
+        <option value="prefer_file1">prefer_file1 — fil 1 vinner alltid</option>
+        <option value="prefer_file2">prefer_file2 — fil 2 vinner alltid</option>
+        <option value="manual">manual — flagga allt för granskning</option>
+      </select>
+    </div>
+    <div class="opt-group">
+      <label>Bitwarden URI-jämförelse</label>
+      <div class="checkbox-row">
+        <input type="checkbox" id="strictUri">
+        <span>Strict (inkludera port och sökväg — bra för homelab)</span>
+      </div>
+    </div>
+    <div class="generic-opts" id="genericOpts">
+      <div class="opt-group">
+        <label>Nyckelfält (komma-separerat)</label>
+        <input type="text" id="keyFields" placeholder="id  eller  name,email">
+        <div class="drop-sub" style="margin-top:4px">Används för att matcha poster i generisk JSON</div>
+      </div>
+      <div class="opt-group">
+        <label>Extra känsliga fält att maskera</label>
+        <input type="text" id="sensitiveFields" placeholder="pin,recovery_code,…">
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-merge" id="mergeBtn" onclick="runMerge()" disabled>
+    Välj båda filerna för att fortsätta
+  </button>
+  <a class="btn-download" id="downloadBtn" download="merged_output.json">
+    ⬇ Ladda ner merged JSON
+  </a>
+  <button class="btn-reset" id="resetBtn" onclick="resetAll()">
+    ↺ Starta om — välj nya filer
+  </button>
+
+  <div class="status" id="status"></div>
+  <div id="report"></div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+const files = { 1: null, 2: null };
+const data  = { 1: null, 2: null };
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const SENSITIVE = new Set([
+  "password","passwd","secret","token","key","pin","totp","credential",
+  "auth","apikey","api_key","private","passphrase","otp","mfa","ssn","cvv","cvc",
+]);
+const ID_FIELDS   = ["id","uuid","guid","_id"];
+const NAME_FIELDS = ["name","title","label","username","email","login","slug"];
+const DATE_FIELDS = [
+  "updatedAt","updated_at","modifiedAt","modified_at",
+  "revisionDate","lastModified","last_modified","timestamp","modified",
+];
+
+// ── Bitwarden "Encrypted JSON" (lösenordsskyddad) export ────────────────────────
+// EXPERIMENTAL: stöd bara för PBKDF2-KDF (kdfType 0). Argon2id (kdfType 1) stöds
+// inte eftersom WebCrypto saknar inbyggt Argon2id — att lägga till det hade krävt
+// ett externt bibliotek, vilket bryter mot "no dependencies"-regeln för verktyget.
+// Krypto-primitiven (AES-CBC, HMAC, PBKDF2) kommer alla från webbläsarens inbyggda
+// SubtleCrypto — inget eget AES/HMAC skrivet för hand. Format verifierat mot
+// Bitwardens öppna källkod (bitwarden/sdk-internal) och en oberoende decrypt-
+// implementation (GurpreetKang/BitwardenDecrypt), men INTE testat mot en riktig
+// Bitwarden-genererad fil eftersom vi inte har tillgång till ett live-konto.
+// Testa själv med en riktig export innan ni litar på resultatet för en migrering.
+
+function isEncryptedBwExport(obj) {
+  return !!(obj && typeof obj === 'object' && obj.encrypted === true && obj.passwordProtected === true);
+}
+
+const te = new TextEncoder(), td = new TextDecoder();
+
+function b64ToBytes(b64) { return Uint8Array.from(atob(b64), c => c.charCodeAt(0)); }
+function bytesToB64(bytes) { return btoa(String.fromCharCode(...new Uint8Array(bytes))); }
+function concatBytes(...arrs) {
+  const total = arrs.reduce((n,a) => n + a.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const a of arrs) { out.set(a, off); off += a.length; }
+  return out;
+}
+
+// Parsar Bitwardens "EncString"-format: "typ.iv|ciphertext|mac" (allt base64 utom typ).
+function parseEncString(s) {
+  const [typeStr, rest] = String(s).split('.');
+  const [ivB64, ctB64, macB64] = rest.split('|');
+  const type = parseInt(typeStr, 10);
+  if (type !== 2) throw new Error(`Ostödd EncString-typ: ${type} (bara typ 2 / AES-256-CBC+HMAC stöds)`);
+  return { iv: b64ToBytes(ivB64), ct: b64ToBytes(ctB64), mac: b64ToBytes(macB64) };
+}
+
+async function pbkdf2Sha256(passwordBytes, saltBytes, iterations, lengthBytes=32) {
+  const keyMaterial = await crypto.subtle.importKey('raw', passwordBytes, 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: saltBytes, iterations }, keyMaterial, lengthBytes * 8
+  );
+  return new Uint8Array(bits);
+}
+
+// HKDF-Expand (RFC 5869), ett enda 32-byte block — motsvarar Bitwardens
+// "stretch"-steg som delar MasterKey i en enc-nyckel och en mac-nyckel.
+async function hkdfExpandOneBlock(prkBytes, infoStr) {
+  const key = await crypto.subtle.importKey('raw', prkBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const info = concatBytes(te.encode(infoStr), new Uint8Array([1]));
+  const sig = await crypto.subtle.sign('HMAC', key, info);
+  return new Uint8Array(sig);
+}
+
+async function hmacSha256(keyBytes, dataBytes) {
+  const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  return new Uint8Array(await crypto.subtle.sign('HMAC', key, dataBytes));
+}
+
+function constantTimeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
+async function aesCbcDecrypt(keyBytes, iv, ciphertext) {
+  const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-CBC' }, false, ['decrypt']);
+  const pt = await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, key, ciphertext);
+  return new Uint8Array(pt);
+}
+
+async function decryptEncString(encStr, encKey, macKey) {
+  const { iv, ct, mac } = parseEncString(encStr);
+  const expectedMac = await hmacSha256(macKey, concatBytes(iv, ct));
+  if (!constantTimeEqual(mac, expectedMac)) {
+    throw new Error('Fel lösenord (eller korrupt fil) — MAC-verifiering misslyckades.');
+  }
+  const pt = await aesCbcDecrypt(encKey, iv, ct);
+  return td.decode(pt);
+}
+
+async function decryptPasswordProtectedExport(container, password) {
+  if (container.kdfType !== 0) {
+    throw new Error(
+      'Den här exporten använder Argon2id (kdfType=1), vilket webbläsarens inbyggda ' +
+      'krypto-API inte stödjer utan ett externt bibliotek. Exportera på nytt med PBKDF2 ' +
+      'som KDF, eller använd en oskyddad JSON-export istället.'
+    );
+  }
+  const saltBytes = te.encode(container.salt);
+  const passwordBytes = te.encode(password);
+  const masterKey = await pbkdf2Sha256(passwordBytes, saltBytes, container.kdfIterations, 32);
+  const encKey = await hkdfExpandOneBlock(masterKey, 'enc');
+  const macKey = await hkdfExpandOneBlock(masterKey, 'mac');
+
+  // Validera lösenordet mot den lilla valideringssträngen innan vi försöker
+  // dekryptera hela payloaden (ger ett snabbt, tydligt felmeddelande).
+  await decryptEncString(container.encKeyValidation_DO_NOT_EDIT, encKey, macKey);
+
+  const plaintext = await decryptEncString(container.data, encKey, macKey);
+  return JSON.parse(plaintext);
+}
+
+// ── Drag & drop ───────────────────────────────────────────────────────────────
+function onDragOver(e, n)  { e.preventDefault(); document.getElementById('zone'+n).classList.add('drag-over'); }
+function onDragLeave(n)    { document.getElementById('zone'+n).classList.remove('drag-over'); }
+function onDrop(e, n)      { e.preventDefault(); onDragLeave(n); loadFile(e.dataTransfer.files[0], n); }
+function onFileInput(e, n) { loadFile(e.target.files[0], n); }
+
+function loadFile(file, n) {
+  if (!file) return;
+  files[n] = file;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    let parsed;
+    try {
+      parsed = JSON.parse(ev.target.result);
+    } catch {
+      showStatus('FEL: ' + file.name + ' är inte giltig JSON.', 'err');
+      return;
+    }
+
+    if (isEncryptedBwExport(parsed)) {
+      const pw = prompt(
+        `"${file.name}" är en lösenordsskyddad Bitwarden-export.\n\n` +
+        `Ange export-lösenordet för att låsa upp den (allt sker lokalt i webbläsaren, ` +
+        `lösenordet skickas ingenstans):`
+      );
+      if (!pw) { showStatus('Avbrutet — inget lösenord angavs för ' + file.name + '.', 'err'); return; }
+      showStatus('Dekrypterar ' + file.name + ' …', '');
+      try {
+        parsed = await decryptPasswordProtectedExport(parsed, pw);
+      } catch (e) {
+        showStatus('FEL vid dekryptering av ' + file.name + ': ' + e.message, 'err');
+        return;
+      }
+    }
+
+    data[n] = parsed;
+    document.getElementById('fname'+n).textContent = file.name;
+    document.getElementById('icon'+n).textContent = '✅';
+    const arr = findItemsArray(data[n]);
+    const count = arr ? arr.items.length : (Array.isArray(data[n]) ? data[n].length : '?');
+    document.getElementById('fcount'+n).textContent = count + ' poster hittade';
+    document.getElementById('zone'+n).classList.add('loaded');
+    checkReady();
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+function resetAll() {
+  data[1] = data[2] = null;
+  files[1] = files[2] = null;
+  [1,2].forEach(n => {
+    document.getElementById('zone'+n).classList.remove('loaded');
+    document.getElementById('fname'+n).textContent = '';
+    document.getElementById('fcount'+n).textContent = '';
+    document.getElementById('icon'+n).textContent = '📂';
+    // Måste nollställa input.value — annars triggar inte onchange om samma fil väljs igen
+    const inp = document.querySelector('#zone'+n+' input[type=file]');
+    if (inp) inp.value = '';
+  });
+  document.getElementById('report').innerHTML = '';
+  document.getElementById('status').style.display = 'none';
+  const dl = document.getElementById('downloadBtn');
+  if (dl.href.startsWith('blob:')) URL.revokeObjectURL(dl.href);
+  dl.style.display = 'none';
+  document.getElementById('resetBtn').style.display = 'none';
+  document.getElementById('genericOpts').style.display = 'none';
+  const btn = document.getElementById('mergeBtn');
+  btn.disabled = true;
+  btn.textContent = 'Välj båda filerna för att fortsätta';
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+function checkReady() {
+  const ready = data[1] !== null && data[2] !== null;
+  const btn = document.getElementById('mergeBtn');
+  btn.disabled = !ready;
+  btn.textContent = ready ? '🔀 Merge' : 'Välj båda filerna för att fortsätta';
+  if (ready) detectFormat();
+}
+
+function detectFormat() {
+  const bw = isBitwarden(data[1]) && isBitwarden(data[2]);
+  const gopts = document.getElementById('genericOpts');
+  gopts.style.display = bw ? 'none' : 'block';
+  if (!bw) {
+    const arr = findItemsArray(data[1]);
+    if (arr) {
+      const kf = autoDetectKeyFields(arr.items);
+      if (kf.length) document.getElementById('keyFields').placeholder = kf.join(',') + '  (auto-detekterat)';
+    }
+  }
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function clone(o)         { return JSON.parse(JSON.stringify(o)); }
+function normText(v)      { return String(v ?? '').trim(); }
+function normLower(v)     { return normText(v).toLowerCase(); }
+function isSens(name)     { const l = String(name).toLowerCase(); return [...SENSITIVE].some(p => l.includes(p)); }
+
+function stableStr(o) {
+  if (o === null || o === undefined) return JSON.stringify(o);
+  if (Array.isArray(o)) return '[' + o.map(stableStr).join(',') + ']';
+  if (typeof o === 'object') {
+    const keys = Object.keys(o).sort();
+    return '{' + keys.map(k => JSON.stringify(k) + ':' + stableStr(o[k])).join(',') + '}';
+  }
+  return JSON.stringify(o);
+}
+
+function parseDt(v) {
+  if (!v) return null;
+  const d = new Date(String(v).replace(/Z$/, '+00:00'));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function chooseSource(ex, inc, policy, dateField='revisionDate') {
+  if (policy === 'prefer_file1') return 'existing';
+  if (policy === 'prefer_file2') return 'incoming';
+  if (policy === 'prefer_newer') {
+    const de = parseDt(ex[dateField]), di = parseDt(inc[dateField]);
+    if (de && di) return di > de ? 'incoming' : 'existing';
+    return (di && !de) ? 'incoming' : 'existing';
+  }
+  return 'manual';
+}
+
+// ── Format detection ──────────────────────────────────────────────────────────
+function isBitwarden(d) {
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return false;
+  if (!Array.isArray(d.items)) return false;
+  return !d.items.length || (typeof d.items[0] === 'object' && 'type' in d.items[0]);
+}
+
+function findItemsArray(d) {
+  if (Array.isArray(d)) return { items: d, key: null };
+  if (d && typeof d === 'object') {
+    let best = null, bestLen = -1;
+    for (const [k, v] of Object.entries(d)) {
+      if (Array.isArray(v) && v.length > bestLen && (!v.length || typeof v[0] === 'object')) {
+        bestLen = v.length; best = { items: v, key: k };
+      }
+    }
+    return best;
+  }
+  return null;
+}
+
+function autoDetectKeyFields(items) {
+  if (!items.length) return [];
+  const s = items[0];
+  for (const f of ID_FIELDS) if (f in s) return [f];
+  return NAME_FIELDS.filter(f => f in s).slice(0, 2);
+}
+
+function autoDetectDateField(items) {
+  if (!items.length) return null;
+  const s = items[0];
+  return DATE_FIELDS.find(f => f in s) || null;
+}
+
+// ── Bitwarden merge ───────────────────────────────────────────────────────────
+function bwLogin(item)    { return item.login || {}; }
+function bwNormUri(uri, strict) {
+  const raw = normLower(uri);
+  if (!raw) return '';
+  const inp = raw.includes('://') ? raw : 'http://' + raw;
+  try {
+    const p = new URL(inp);
+    const host = p.hostname.toLowerCase();
+    let port = p.port ? parseInt(p.port) : null;
+    if (port === 80 || port === 443) port = null;
+    const path = p.pathname.replace(/\/+$/, '');
+    if (!host) return raw;
+    return strict ? host + (port ? ':'+port : '') + (path||'') : host;
+  } catch { return raw; }
+}
+function bwUriSet(item, strict) {
+  const s = new Set();
+  for (const u of (bwLogin(item).uris || []))
+    if (u?.uri) { const n = bwNormUri(u.uri, strict); if (n) s.add(n); }
+  return [...s].sort();
+}
+function bwFieldsMap(item) {
+  const m = {};
+  for (const f of (item.fields||[])) { const n=normText(f.name); if(n) m[n]={value:f.value,type:f.type}; }
+  return m;
+}
+function bwExactFP(item) {
+  const l = bwLogin(item), fm = bwFieldsMap(item);
+  return stableStr({
+    type:item.type, name:normLower(item.name), username:normLower(l.username),
+    password:l.password, totp:l.totp, uris:bwUriSet(item,true),
+    notes:item.notes, fields:Object.keys(fm).sort().map(k=>[k,fm[k].value,fm[k].type]),
+    card:item.card, identity:item.identity, secureNote:item.secureNote, sshKey:item.sshKey,
+  });
+}
+function bwSoftKey(item) {
+  const l = bwLogin(item), t = item.type != null ? parseInt(item.type) : -1;
+  return `${t}|${normLower(item.name)}|${normLower(l.username)}`;
+}
+
+function bwMergeItem(existing, incoming, policy, strict) {
+  const m = clone(existing);
+  const lm = m.login || (m.login = {});
+  const li = incoming.login || {};
+  const diff = [];
+
+  for (const f of ['password','totp']) {
+    if (lm[f] !== li[f]) {
+      const dec = chooseSource(existing, incoming, policy);
+      diff.push({type:`${f}_conflict`, decision:dec, sensitive:true});
+      if (dec==='incoming') lm[f] = li[f];
+    }
+  }
+  if (normText(m.notes) !== normText(incoming.notes)) {
+    const dec = chooseSource(existing, incoming, policy);
+    diff.push({type:'notes_conflict', decision:dec});
+    if (dec==='incoming' && incoming.notes) m.notes = incoming.notes;
+  }
+  const urisM = lm.uris || (lm.uris=[]);
+  const known = new Set(urisM.filter(u=>u?.uri).map(u=>bwNormUri(u.uri,strict)));
+  const added=[];
+  for (const u of (li.uris||[])) {
+    if (!u?.uri) continue;
+    const n=bwNormUri(u.uri,strict);
+    if (n&&!known.has(n)) { urisM.push({uri:u.uri,match:u.match}); known.add(n); added.push(u.uri); }
+  }
+  if (added.length) diff.push({type:'uris_added',value:added});
+
+  const fm = m.fields || (m.fields=[]);
+  const fi_arr = incoming.fields || [];
+  const fidx = {};
+  fm.forEach((f,i)=>{ const n=normText(f.name); if(n) fidx[n]=i; });
+  for (const f of fi_arr) {
+    const name=normText(f.name); if(!name) continue;
+    if (!(name in fidx)) {
+      fm.push(clone(f)); diff.push({type:'field_added',field:name,sensitive:isSens(name)});
+    } else {
+      const idx=fidx[name];
+      if (fm[idx].value!==f.value || fm[idx].type!==f.type) {
+        const dec=chooseSource(existing,incoming,policy);
+        diff.push({type:'field_conflict',field:name,old:'***',new:'***',decision:dec,sensitive:true});
+        if (dec==='incoming') fm[idx]=clone(f);
+      }
+    }
+  }
+  for (const top of ['card','identity','secureNote','sshKey']) {
+    if (stableStr(m[top])!==stableStr(incoming[top])) {
+      const dec=chooseSource(existing,incoming,policy);
+      diff.push({type:`${top}_conflict`,decision:dec});
+      if (dec==='incoming') m[top]=clone(incoming[top]);
+    }
+  }
+  const de=parseDt(m.revisionDate), di=parseDt(incoming.revisionDate);
+  if (di&&(!de||di>de)) m.revisionDate=incoming.revisionDate;
+
+  const he=m.passwordHistory||[], hi=incoming.passwordHistory||[];
+  if (hi.length) {
+    const seen=new Set(he.map(h=>`${h.password}|${h.lastUsedDate}`));
+    for (const h of hi) { const k=`${h.password}|${h.lastUsedDate}`; if(!seen.has(k)){he.push(clone(h));seen.add(k);} }
+    m.passwordHistory=he;
+  }
+  const manualTypes = diff.filter(c=>c.decision==='manual').map(c=>c.type);
+  if (manualTypes.length) {
+    const ns=new Set((m.fields||[]).map(f=>normText(f.name)));
+    if (!ns.has('_merge_review')) (m.fields||(m.fields=[])).push({name:'_merge_review',value:'true',type:0});
+    if (!ns.has('_merge_review_reason')) (m.fields||(m.fields=[])).push({name:'_merge_review_reason',value:manualTypes.join(', '),type:0});
+  }
+  return {merged:m, diff};
+}
+
+// Flaggar poster som delar lösenord med minst en annan post (_reused_password=true).
+// Lösenordsvärdet lagras aldrig separat — bara en boolesk flagga per post.
+function flagReusedBwPasswords(items) {
+  const byPassword = new Map();
+  for (const it of items) {
+    const pw = bwLogin(it).password;
+    if (pw) { if (!byPassword.has(pw)) byPassword.set(pw, []); byPassword.get(pw).push(it); }
+  }
+  let flagged = 0;
+  for (const group of byPassword.values()) {
+    if (group.length < 2) continue;
+    for (const it of group) {
+      const fields = it.fields || (it.fields = []);
+      const names = new Set(fields.map(f=>normText(f.name)));
+      if (!names.has('_reused_password')) { fields.push({name:'_reused_password',value:'true',type:0}); flagged++; }
+    }
+  }
+  return flagged;
+}
+
+function runBitwarden(items1, items2, policy, strict) {
+  const map = new Map();
+  for (const it of items1) { const k=bwSoftKey(it); if(!map.has(k))map.set(k,[]); map.get(k).push(clone(it)); }
+  const rep = emptyReport(policy, items1.length, items2.length);
+
+  for (const it of items2) {
+    const sk=bwSoftKey(it), fp=bwExactFP(it), cands=map.get(sk)||[];
+    if (!cands.length) {
+      map.set(sk,[clone(it)]); rep.stats.new_entries_from_file2++;
+      const l=bwLogin(it);
+      rep.new_entries.push({display_name:it.name||'(inget namn)',fields_preview:`user=${l.username||'–'}`,uris:bwUriSet(it,false)});
+      continue;
+    }
+    let matched=false;
+    for (let i=0;i<cands.length;i++) {
+      if (bwExactFP(cands[i])===fp) { rep.stats.exact_duplicates++; matched=true; break; }
+      const eu=new Set(bwUriSet(cands[i],strict)), iu=new Set(bwUriSet(it,strict));
+      const sameUri=[...eu].some(u=>iu.has(u))||(!eu.size&&!iu.size);
+      if (sameUri) {
+        const {merged,diff}=bwMergeItem(cands[i],it,policy,strict);
+        cands[i]=merged;
+        if (diff.length) {
+          const l=bwLogin(cands[i]);
+          const nm=(cands[i].name||'(inget namn)')+(l.username?` / ${l.username}`:'');
+          rep.stats.merged_entries++;
+          rep.merged_changes.push({display_name:nm,changes:diff});
+          if (diff.some(c=>c.decision==='manual')) { rep.stats.conflicted_entries++; rep.manual_review.push({display_name:nm,changes:diff}); }
+        }
+        matched=true; break;
+      }
+    }
+    if (!matched) {
+      cands.push(clone(it)); map.set(sk,cands); rep.stats.new_entries_from_file2++;
+      const l=bwLogin(it);
+      rep.new_entries.push({display_name:it.name||'(inget namn)',fields_preview:`user=${l.username||'–'}`,uris:bwUriSet(it,false)});
+    }
+  }
+  return { items:[...map.values()].flat(), report:rep };
+}
+
+// ── Generic merge ─────────────────────────────────────────────────────────────
+function gKey(it, kf)  { return kf.map(f=>normLower(it[f])).join('|'); }
+function gFP(it)       { return stableStr(it); }
+
+function gMergeItem(ex, inc, policy, df, extraSens) {
+  const m=clone(ex), diff=[];
+  const allKeys=new Set([...Object.keys(ex),...Object.keys(inc)]);
+  for (const f of [...allKeys].sort()) {
+    if (f===df) continue;
+    const ve=ex[f], vi=inc[f];
+    if (stableStr(ve)===stableStr(vi)) continue;
+    const sens=isSens(f)||extraSens.has(f);
+    if (!(f in ex)) { m[f]=clone(vi); diff.push({type:'field_added',field:f,sensitive:sens}); continue; }
+    if (!(f in inc)) continue;
+    const dec=chooseSource(ex,inc,policy,df||'');
+    diff.push({type:'field_conflict',field:f,old:sens?'***':ve,new:sens?'***':vi,decision:dec,sensitive:sens});
+    if (dec==='incoming') m[f]=clone(vi);
+  }
+  if (df) { const de=parseDt(ex[df]),di=parseDt(inc[df]); if(di&&(!de||di>de)) m[df]=inc[df]; }
+  if (diff.some(c=>c.decision==='manual')) m._merge_review='true';
+  return {merged:m, diff};
+}
+
+function runGeneric(items1, items2, policy, kf, df, extraSens) {
+  const map=new Map();
+  for (const it of items1) { const k=gKey(it,kf); if(!map.has(k))map.set(k,[]); map.get(k).push(clone(it)); }
+  const rep=emptyReport(policy,items1.length,items2.length);
+  const dn=it=>{ for(const f of kf){const v=it[f];if(v)return String(v);} return JSON.stringify(it).slice(0,60); };
+
+  for (const it of items2) {
+    const k=gKey(it,kf), fp=gFP(it), cands=map.get(k)||[];
+    if (!cands.length) {
+      map.set(k,[clone(it)]); rep.stats.new_entries_from_file2++;
+      rep.new_entries.push({display_name:dn(it),fields_preview:'',uris:[]});
+      continue;
+    }
+    let matched=false;
+    for (let i=0;i<cands.length;i++) {
+      if (gFP(cands[i])===fp) { rep.stats.exact_duplicates++; matched=true; break; }
+      const {merged,diff}=gMergeItem(cands[i],it,policy,df,extraSens);
+      cands[i]=merged;
+      if (diff.length) {
+        const nm=dn(cands[i]);
+        rep.stats.merged_entries++;
+        rep.merged_changes.push({display_name:nm,changes:diff});
+        if (diff.some(c=>c.decision==='manual')) { rep.stats.conflicted_entries++; rep.manual_review.push({display_name:nm,changes:diff}); }
+      }
+      matched=true; break;
+    }
+    if (!matched) {
+      cands.push(clone(it)); map.set(k,cands); rep.stats.new_entries_from_file2++;
+      rep.new_entries.push({display_name:dn(it),fields_preview:'',uris:[]});
+    }
+  }
+  return { items:[...map.values()].flat(), report:rep };
+}
+
+function emptyReport(policy, n1, n2) {
+  return { policy, stats:{file1_items:n1,file2_items:n2,exact_duplicates:0,merged_entries:0,new_entries_from_file2:0,conflicted_entries:0,reused_passwords:0},
+    exact_duplicates:[],merged_changes:[],new_entries:[],manual_review:[] };
+}
+
+// ── Main entry ────────────────────────────────────────────────────────────────
+function runMerge() {
+  const policy = document.getElementById('policy').value;
+  const strict = document.getElementById('strictUri').checked;
+  hideReport();
+  showStatus('Merger pågår…', '');
+
+  let mergedItems, report, outputData, modeLbl;
+  const d1=data[1], d2=data[2];
+
+  if (isBitwarden(d1) && isBitwarden(d2)) {
+    modeLbl = 'Bitwarden / Vaultwarden';
+    const r = runBitwarden(d1.items||[], d2.items||[], policy, strict);
+    mergedItems = r.items; report = r.report;
+    report.stats.reused_passwords = flagReusedBwPasswords(mergedItems);
+    outputData = Object.assign({}, d1, { items: mergedItems });
+  } else {
+    const arr1 = findItemsArray(d1);
+    const arr2 = findItemsArray(d2);
+    if (!arr1 || !arr2) { showStatus('FEL: Kunde inte hitta en array av poster i filerna.', 'err'); return; }
+
+    const kfRaw = document.getElementById('keyFields').value.trim();
+    let kf = kfRaw ? kfRaw.split(',').map(s=>s.trim()).filter(Boolean) : autoDetectKeyFields(arr1.items);
+    if (!kf.length) { showStatus('FEL: Ange nyckelfält (t.ex. id eller name,email).', 'err'); return; }
+
+    const df = autoDetectDateField(arr1.items);
+    const sfRaw = document.getElementById('sensitiveFields').value.trim();
+    const extraSens = new Set(sfRaw ? sfRaw.split(',').map(s=>s.trim()) : []);
+    modeLbl = `Generisk JSON — nyckel: ${kf.join(', ')}`;
+    const r = runGeneric(arr1.items, arr2.items, policy, kf, df, extraSens);
+    mergedItems = r.items; report = r.report;
+    if (Array.isArray(d1)) outputData = mergedItems;
+    else if (arr1.key) { outputData=Object.assign({},d1); outputData[arr1.key]=mergedItems; }
+    else outputData=mergedItems;
+  }
+
+  const blob = new Blob([JSON.stringify(outputData, null, 2)], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const dl   = document.getElementById('downloadBtn');
+  dl.href    = url;
+  dl.download= 'merged_output.json';
+  dl.style.display = 'block';
+
+  const stats = report.stats;
+  document.getElementById('resetBtn').style.display = 'block';
+  showStatus(
+    `✓ Klar! Mergade ${stats.merged_entries} poster, ${stats.new_entries_from_file2} nya, ` +
+    `${stats.exact_duplicates} exakta kopior ignorerade` +
+    (stats.conflicted_entries ? ` — ⚠️ ${stats.conflicted_entries} kräver manuell granskning` : '') +
+    (stats.reused_passwords ? ` — 🔑 ${stats.reused_passwords} poster delar lösenord med en annan` : '.'),
+    'ok'
+  );
+  renderReport(report, mergedItems.length, files[1].name, files[2].name, modeLbl);
+}
+
+// ── Status & report rendering ─────────────────────────────────────────────────
+function showStatus(msg, cls) {
+  const el = document.getElementById('status');
+  el.textContent = msg; el.className = 'status ' + cls; el.style.display = 'block';
+}
+function hideReport() {
+  document.getElementById('report').innerHTML = '';
+  const dl = document.getElementById('downloadBtn');
+  dl.style.display = 'none';
+  if (dl.href.startsWith('blob:')) URL.revokeObjectURL(dl.href);
+}
+
+function esc(t) { return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function safeHref(u) { const s=String(u).trim().toLowerCase(); return s.startsWith('http://')||s.startsWith('https://')?esc(u):'#'; }
+function badge(label,color) {
+  const c={green:'#22c55e',red:'#ef4444',yellow:'#f59e0b',blue:'#3b82f6',gray:'#6b7280'};
+  return `<span style="background:${c[color]||c.gray};color:#fff;padding:2px 8px;border-radius:99px;font-size:.73em;font-weight:700">${esc(label)}</span>`;
+}
+function decBadge(d) {
+  if(d==='existing') return badge('fil 1 vann','blue');
+  if(d==='incoming') return badge('fil 2 vann','green');
+  if(d==='manual')   return badge('⚠ manuell','red');
+  return badge(d,'gray');
+}
+function changeRow(ch) {
+  const t=ch.type||'', d=ch.decision||'', b=d?decBadge(d):'', sens=ch.sensitive;
+  if(t==='password_conflict'||t==='totp_conflict')
+    return `<tr><td>${t==='password_conflict'?'🔑 Lösenord':'🔐 TOTP'}</td><td><em class="muted">Skiljer sig (dold)</em></td><td>${b}</td></tr>`;
+  if(t==='notes_conflict')
+    return `<tr><td>📝 Anteckningar</td><td><em class="muted">Skiljer sig</em></td><td>${b}</td></tr>`;
+  if(t==='uris_added') {
+    const links=(ch.value||[]).map(u=>`<a href="${safeHref(u)}" target="_blank" rel="noopener" class="lnk">${esc(u)}</a>`).join(', ');
+    return `<tr><td>🔗 URI tillagd</td><td>${links}</td><td>${badge('ny','green')}</td></tr>`;
+  }
+  if(t==='field_added')
+    return `<tr><td>➕ Nytt fält</td><td>${esc(ch.field)}</td><td>${badge('ny','green')}</td></tr>`;
+  if(t==='field_conflict') {
+    const det=sens?`<em class="muted">Skiljer sig (dold)</em>`:`<code>${esc(ch.old)}</code> → <code>${esc(ch.new)}</code>`;
+    return `<tr><td>📋 ${esc(ch.field)}</td><td>${det}</td><td>${b}</td></tr>`;
+  }
+  return `<tr><td>${esc(t)}</td><td>–</td><td>${b}</td></tr>`;
+}
+
+function renderReport(report, total, f1, f2, modeLbl) {
+  const stats=report.stats, merged=report.merged_changes, newE=report.new_entries, manual=report.manual_review, dups=report.exact_duplicates;
+  const ts=new Date().toLocaleString('sv-SE');
+
+  function card(lbl,val,color) {
+    const styles={
+      default:'background:var(--surface)',
+      yellow:'background:var(--yellow-bg);border-color:var(--yellow-border)',
+      red:'background:var(--red-bg);border-color:var(--red-border)',
+      green:'background:var(--green-bg);border-color:var(--green-border)',
+    }[color||'default'];
+    const valColor={default:'',yellow:'color:var(--yellow)',red:'color:var(--red)',green:'color:var(--green)'}[color||'default'];
+    return `<div class="card" style="${styles}"><div class="card-val" style="${valColor}">${val}</div><div class="card-lbl">${lbl}</div></div>`;
+  }
+
+  let manualHtml='';
+  if(manual.length) {
+    let rows='';
+    for(const e of manual) {
+      const inner=e.changes.map(changeRow).join('');
+      rows+=`<details open style="margin-bottom:8px"><summary class="sred"><strong>${esc(e.display_name)}</strong></summary>
+        <div class="dbody"><table><thead><tr><th>Fält</th><th>Detalj</th><th>Beslut</th></tr></thead><tbody>${inner}</tbody></table></div></details>`;
+    }
+    manualHtml=`<div class="alert-box">
+      <h2 style="margin-top:0;color:var(--red);border:none">⚠️ Manuell granskning krävs (${manual.length} st)</h2>
+      <p style="color:var(--text-dim);margin-bottom:14px">Dessa poster har konflikter. De har fått <code>_merge_review=true</code> och <code>_merge_review_reason</code> (vilken/vilka konflikttyper) i utdatan.</p>
+      ${rows}</div>`;
+  }
+
+  let mergedHtml='';
+  for(const e of merged) {
+    const flag=e.changes.some(c=>c.decision==='manual')?' ⚠️':'';
+    const types=e.changes.map(c=>c.type).join(' ');
+    const inner=e.changes.map(changeRow).join('');
+    mergedHtml+=`<details class="mi" data-name="${esc(e.display_name).toLowerCase()}" data-types="${esc(types)}" style="margin-bottom:5px">
+      <summary class="sdef"><span><strong>${esc(e.display_name)}</strong>${flag}</span><span class="muted sm">${e.changes.length} ändring(ar)</span></summary>
+      <div class="dbody"><table><thead><tr><th>Fält</th><th>Detalj</th><th>Beslut</th></tr></thead><tbody>${inner}</tbody></table></div></details>`;
+  }
+  if(!mergedHtml) mergedHtml=`<p class="muted center">Inga poster mergades med skillnader.</p>`;
+
+  let newRows='';
+  for(const e of newE) {
+    const uris=(e.uris||[]).map(u=>`<a href="${safeHref(u)}" target="_blank" rel="noopener" class="lnk">${esc(u)}</a>`).join(' ')||'–';
+    newRows+=`<tr><td>${esc(e.display_name)}</td><td class="sm muted">${esc(e.fields_preview)}</td><td class="sm muted">${uris}</td></tr>`;
+  }
+  if(!newRows) newRows=`<tr><td colspan="3" class="muted center">Inga nya poster.</td></tr>`;
+
+  document.getElementById('report').innerHTML = `
+    <div style="color:var(--text-faint);font-size:.82em;margin-bottom:16px">
+      ${esc(ts)} · Läge: <strong>${esc(modeLbl)}</strong> · Policy: <strong>${esc(report.policy)}</strong><br>
+      ${esc(f1)} + ${esc(f2)}
+    </div>
+    <div class="cards">
+      ${card('Fil 1',stats.file1_items)}
+      ${card('Fil 2',stats.file2_items)}
+      ${card('Exakta kopior',stats.exact_duplicates)}
+      ${card('Mergade',stats.merged_entries,stats.merged_entries?'yellow':'default')}
+      ${card('Nya från fil 2',stats.new_entries_from_file2,stats.new_entries_from_file2?'green':'default')}
+      ${card('Kräver review',stats.conflicted_entries,stats.conflicted_entries?'red':'default')}
+      ${card('Återanvända lösenord',stats.reused_passwords||0,stats.reused_passwords?'yellow':'default')}
+      ${card('Totalt output',total)}
+    </div>
+    ${manualHtml}
+    <h2>🔄 Mergade poster med skillnader (${merged.length} st)</h2>
+    <div class="toolbar">
+      <input type="text" id="sq" placeholder="Sök på namn…" oninput="filterMerge()">
+      <button class="fbtn active" onclick="setFilter('all',this)">Alla</button>
+      <button class="fbtn" onclick="setFilter('password_conflict',this)">Lösenord</button>
+      <button class="fbtn" onclick="setFilter('field_conflict',this)">Fält</button>
+      <button class="fbtn" onclick="document.querySelectorAll('.mi').forEach(d=>d.open=true)">Expandera</button>
+      <button class="fbtn" onclick="document.querySelectorAll('.mi').forEach(d=>d.open=false)">Stäng</button>
+    </div>
+    <div id="mlist">${mergedHtml}</div>
+    <h2>🆕 Nya poster från fil 2 (${newE.length} st)</h2>
+    <div class="ntbl"><table>
+      <thead><tr><th>Namn/Nyckel</th><th>Info</th><th>URI(er)</th></tr></thead>
+      <tbody>${newRows}</tbody>
+    </table></div>
+    <div class="footer">
+      ✅ <strong>${dups.length}</strong> identiska poster ignorerades. Totalt <strong>${total}</strong> poster i merged-filen.
+    </div>`;
+}
+
+let _activeFilter='all';
+function setFilter(f,btn) {
+  _activeFilter=f;
+  document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); filterMerge();
+}
+function filterMerge() {
+  const q=(document.getElementById('sq')?.value||'').toLowerCase().trim();
+  document.querySelectorAll('.mi').forEach(el=>{
+    const nOk=!q||(el.dataset.name||'').includes(q);
+    const fOk=_activeFilter==='all'||(el.dataset.types||'').includes(_activeFilter);
+    el.classList.toggle('hidden',!(nOk&&fOk));
+  });
+}
+</script>
+</body>
+</html>

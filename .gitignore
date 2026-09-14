@@ -1,0 +1,45 @@
+# ── Vault exports — NEVER commit these ───────────────────────────────────────
+# These files contain an entire password vault in plaintext.
+*_export_*.json
+bitwarden_export_*.json
+vaultwarden_export_*.json
+
+# Merge output, reports and backups
+merged_*.json
+merged_output.json
+*.bak
+*_merge_report.json
+*_merge_report.html
+merge_report.html
+
+# Tool state
+.merge_state.json
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.directory
+
+# ── Editors ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Temp files from atomic writes ─────────────────────────────────────────────
+.*.tmp
