@@ -3,7 +3,6 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/)
 [![Zero dependencies](https://img.shields.io/badge/dependencies-zero-brightgreen.svg)](merge_json_v4.py)
-[![Tests](https://github.com/<username>/VaultWeaver/actions/workflows/tests.yml/badge.svg)](https://github.com/<username>/VaultWeaver/actions/workflows/tests.yml)
 
 **Merge two Bitwarden / Vaultwarden vault exports into one — with real conflict resolution, a diff you can review, and a one-command rollback.**
 
@@ -193,7 +192,7 @@ VaultWeaver's core — merging two separate vaults with conflict policies, diff/
 
 ## Roadmap
 
-See [TODO.md](TODO.md) — next up: flagging reused passwords, a rationale field for manual-review items, and optional support for Bitwarden's password-protected export format.
+See [TODO.md](TODO.md) for full history. Current state: two-vault merge, conflict policies, reused-password flagging, manual-review rationale, `--shred-inputs`, and experimental encrypted-export decryption (browser, PBKDF2 only) are all shipped. No open items beyond what's documented as known limitations above.
 
 ---
 
