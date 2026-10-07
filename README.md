@@ -38,6 +38,8 @@ Search "bitwarden merge duplicates" and you'll find a handful of tools — all o
 - **Conflict policies** — `prefer_newer`, `prefer_file1`, `prefer_file2`, or `manual` (flags items for review instead of guessing).
 - **Reused-password detection** (CLI) — items sharing a password with another item get flagged `_reused_password=true`, so you catch credential reuse for free while merging. The password value itself is never duplicated anywhere — just a boolean flag.
 - **Rationale on manual-review items** (CLI) — `_merge_review_reason` records *why* an item needs a human look (e.g. `password_conflict, notes_conflict`), not just that it does.
+- **Manual exclusion** (browser, Bitwarden mode) — a checkbox on any item lets you drop it from the download entirely, no re-merge needed. Useful for stale homelab IPs, dead accounts, or anything else you don't want carried into the new vault.
+- **Full transparency in the report** — a dedicated section lists items that existed only in file 1 and were never touched, alongside the existing "new from file 2" and "merged" sections. Nothing is silently carried through without being shown.
 - **Diff mode** — see exactly what would change before touching anything.
 - **Dry run** — full report, zero writes.
 - **Rollback** — one command restores the previous output from its automatic backup.
@@ -52,7 +54,13 @@ Search "bitwarden merge duplicates" and you'll find a handful of tools — all o
 
 Open [`merge_tool.html`](merge_tool.html) directly in any modern browser (also published as [`index.html`](index.html) for GitHub Pages hosting — same file, same code, nothing hidden).
 
-Supports Bitwarden's password-protected **Encrypted JSON** export too — drop one in and you'll be prompted for the export password, decrypted entirely client-side via the browser's native WebCrypto API. ⚠️ **Experimental:** only the PBKDF2 KDF is supported (not Argon2id — WebCrypto has no native Argon2id, and adding a library would break the zero-dependency design); verified against Bitwarden's published crypto spec and an independent decrypt implementation via a self-test, but not yet against a real Bitwarden-generated file. Test it with your own export before relying on it for a real migration.
+Supports Bitwarden's password-protected **Encrypted JSON** export too — drop one in and you'll be prompted for the export password, decrypted entirely client-side via the browser's native WebCrypto API. Verified against a real Bitwarden-generated export, not just a self-test. ⚠️ **Only the PBKDF2 KDF is supported, not Argon2id** — WebCrypto has no native Argon2id, and adding a library would break the zero-dependency design. Check which one your account uses under `Settings → Security → Keys`.
+
+> **Two different "encrypted export" options exist in Bitwarden/Vaultwarden — don't mix them up:**
+> - **"Encrypted" using your account's own encryption key** (tied to your master password) — **not supported**, and won't be; decrypting it correctly requires the same key-derivation path as the live account itself, which is a much bigger (and riskier) thing to reimplement than a one-time export password.
+> - **"Password protected"** (a one-time password you set at export time, produces a `kdfType` field) — **this is the one VaultWeaver supports.**
+>
+> If you drop in the account-key-encrypted file, VaultWeaver won't recognize it and won't prompt for a password — that's expected, not a bug. Re-export using "Password protected" instead.
 
 1. Drag your two JSON exports onto the drop zones (or click to browse).
 2. Pick a conflict policy — `prefer_newer` is the default and usually right.

@@ -63,3 +63,9 @@ Data flow: two JSON exports → deduplication + conflict resolution → merged J
 - After editing `merge_tool.html`, always re-sync `index.html` (`cp merge_tool.html index.html`) — they must stay byte-identical.
 - After editing `merge_json_v4.py` or the HTML tool, run `python -m pytest tests/ -v` before considering the change done.
 - Never test against real vault data. Use synthetic/example records only, even for manual verification.
+
+## Session hygiene
+Before I run /clear or end a session: update STATUS.md (done / in 
+progress / next) before ending.
+At the start of a new session: read STATUS.md first. If missing or 
+empty, ask me what we're working on instead of guessing.

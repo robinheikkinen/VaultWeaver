@@ -612,9 +612,13 @@ def flag_reused_bw_passwords(items):
 
 def run_bitwarden_merge(items1, items2, args):
     merged_map = {}
+    file1_ids  = set()
     for item in items1:
-        merged_map.setdefault(bw_soft_key(item), []).append(copy.deepcopy(item))
+        copied = copy.deepcopy(item)
+        merged_map.setdefault(bw_soft_key(item), []).append(copied)
+        file1_ids.add(id(copied))
 
+    touched_ids = set()
     report = _empty_report(args.policy, len(items1), len(items2))
 
     for item in items2:
@@ -637,6 +641,7 @@ def run_bitwarden_merge(items1, items2, args):
         matched = False
         for idx, existing in enumerate(candidates):
             if bw_exact_fingerprint(existing) == fp:
+                touched_ids.add(id(existing))
                 report["stats"]["exact_duplicates"] += 1
                 matched = True
                 break
@@ -644,6 +649,7 @@ def run_bitwarden_merge(items1, items2, args):
             e_uris = set(_bw_uri_set(existing, args.strict_uri))
             i_uris = set(_bw_uri_set(item,     args.strict_uri))
             if (e_uris & i_uris) or (not e_uris and not i_uris):
+                touched_ids.add(id(existing))
                 merged_item, diff = bw_merge_item(
                     existing, item, policy=args.policy, strict_uri=args.strict_uri
                 )
@@ -674,6 +680,17 @@ def run_bitwarden_merge(items1, items2, args):
                 "fields_preview": f"user={s['username'] or '–'}",
                 "uris":           s["uris"],
             })
+
+    for lst in merged_map.values():
+        for it in lst:
+            if id(it) in file1_ids and id(it) not in touched_ids:
+                s = bw_summarize(it)
+                report["stats"]["file1_only_unchanged"] += 1
+                report["file1_only"].append({
+                    "display_name":   s["name"] or "(inget namn)",
+                    "fields_preview": f"user={s['username'] or '–'}",
+                    "uris":           s["uris"],
+                })
 
     return [item for lst in merged_map.values() for item in lst], report
 
@@ -826,10 +843,11 @@ def _empty_report(policy, n1, n2):
             "file1_items": n1, "file2_items": n2,
             "exact_duplicates": 0, "merged_entries": 0,
             "new_entries_from_file2": 0, "conflicted_entries": 0,
-            "reused_passwords": 0,
+            "reused_passwords": 0, "file1_only_unchanged": 0,
         },
         "exact_duplicates": [], "merged_changes": [],
         "new_entries": [],     "manual_review": [],
+        "file1_only": [],
     }
 
 
@@ -839,6 +857,7 @@ def build_html_report(report, total_output, file1, file2, mode_label):
     new_e  = report.get("new_entries", [])
     manual = report.get("manual_review", [])
     dups   = report.get("exact_duplicates", [])
+    f1only = report.get("file1_only", [])
     ts     = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     def card(label, value, color="default"):
@@ -856,6 +875,7 @@ def build_html_report(report, total_output, file1, file2, mode_label):
              "yellow" if stats["merged_entries"] else "default"),
         card("Nya från fil 2", stats["new_entries_from_file2"],
              "green"  if stats["new_entries_from_file2"] else "default"),
+        card("Bara i fil 1",   stats.get("file1_only_unchanged", 0)),
         card("Kräver review",  stats["conflicted_entries"],
              "red"    if stats["conflicted_entries"] else "default"),
         card("Återanvända lösenord", stats.get("reused_passwords", 0),
@@ -915,6 +935,18 @@ def build_html_report(report, total_output, file1, file2, mode_label):
         new_rows += f"<tr><td>{name}</td><td class='small muted'>{prev}</td><td class='small muted'>{uris}</td></tr>"
     if not new_rows:
         new_rows = "<tr><td colspan='3' class='muted center'>Inga nya poster.</td></tr>"
+
+    f1only_rows = ""
+    for e in f1only:
+        name  = _esc(e.get("display_name") or "(inget namn)")
+        prev  = _esc(e.get("fields_preview", ""))
+        uris  = "".join(
+            f'<a href="{_safe_href(u)}" target="_blank" rel="noopener" class="link">{_esc(u)}</a> '
+            for u in (e.get("uris") or [])
+        ) or "–"
+        f1only_rows += f"<tr><td>{name}</td><td class='small muted'>{prev}</td><td class='small muted'>{uris}</td></tr>"
+    if not f1only_rows:
+        f1only_rows = "<tr><td colspan='3' class='muted center'>Inga poster bara i fil 1.</td></tr>"
 
     css = """
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -1019,6 +1051,16 @@ def build_html_report(report, total_output, file1, file2, mode_label):
       <tbody>{new_rows}</tbody>
     </table>
   </div>
+
+  <details style="margin-top:20px">
+    <summary class="summary-default"><strong>📄 Bara i fil 1, oförändrade ({len(f1only)} st)</strong></summary>
+    <div class="new-table" style="margin-top:8px">
+      <table>
+        <thead><tr><th>Namn/Nyckel</th><th>Fält</th><th>URI(er)</th></tr></thead>
+        <tbody>{f1only_rows}</tbody>
+      </table>
+    </div>
+  </details>
 
   <div class="footer">
     ✅ <strong>{len(dups)}</strong> identiska poster ignorerades.

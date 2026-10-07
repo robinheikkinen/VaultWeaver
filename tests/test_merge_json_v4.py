@@ -154,6 +154,30 @@ def test_cli_end_to_end_flags_reused_password_without_leaking_it(tmp_path):
     assert secret not in report.read_text(encoding="utf-8")
 
 
+def test_run_bitwarden_merge_reports_file1_only_items():
+    items1 = [
+        {"id": "1", "type": 1, "name": "Only in file 1", "login": {"username": "a", "password": "pw1"},
+         "revisionDate": "2020-01-01T00:00:00Z"},
+        {"id": "2", "type": 1, "name": "Shared", "login": {"username": "b", "password": "pw2"},
+         "revisionDate": "2020-01-01T00:00:00Z"},
+    ]
+    items2 = [
+        {"id": "2", "type": 1, "name": "Shared", "login": {"username": "b", "password": "pw2-new"},
+         "revisionDate": "2025-01-01T00:00:00Z"},
+    ]
+
+    class Args:
+        policy = "prefer_newer"
+        strict_uri = True
+        dry_run = False
+
+    merged_items, report = mj.run_bitwarden_merge(items1, items2, Args())
+    assert report["stats"]["file1_only_unchanged"] == 1
+    assert report["file1_only"][0]["display_name"] == "Only in file 1"
+    # Den delade posten ska INTE dyka upp som "bara i fil 1" eftersom den mergades
+    assert all(e["display_name"] != "Shared" for e in report["file1_only"])
+
+
 def test_shred_file_overwrites_and_removes(tmp_path):
     f = tmp_path / "secret.json"
     f.write_text('{"password": "correct-horse-battery-staple"}', encoding="utf-8")

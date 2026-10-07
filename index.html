@@ -124,6 +124,9 @@ table{width:100%;border-collapse:collapse;font-size:.85em}
 th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--border-soft);vertical-align:top}
 th{color:var(--text-faint);font-size:.72em;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
 .muted{color:var(--text-faint)} .sm{font-size:.8em} .center{text-align:center;padding:18px;color:var(--text-faint)}
+.excl-cb{width:auto;accent-color:var(--red);cursor:pointer}
+tr.excluded-row,details.mi.excluded-row{opacity:.45}
+tr.excluded-row td:not(:last-child),details.mi.excluded-row summary strong{text-decoration:line-through}
 code{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:.87em;color:var(--text-dim)}
 .lnk{color:var(--accent);text-decoration:none} .lnk:hover{text-decoration:underline}
 .hidden{display:none!important}
@@ -211,6 +214,7 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:.87
   <a class="btn-download" id="downloadBtn" download="merged_output.json">
     ⬇ Ladda ner merged JSON
   </a>
+  <div id="exclInfo" class="sm muted" style="text-align:center;margin:-4px 0 8px"></div>
   <button class="btn-reset" id="resetBtn" onclick="resetAll()">
     ↺ Starta om — välj nya filer
   </button>
@@ -223,6 +227,13 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:4px;font-size:.87
 // ── State ──────────────────────────────────────────────────────────────────────
 const files = { 1: null, 2: null };
 const data  = { 1: null, 2: null };
+
+// ── Manuell uteslutning av poster (gamla homelab-IP:n, utgångna lösenord osv.) ──
+// Fungerar bara i Bitwarden-läge (posterna har ett stabilt 'id'-fält att peka på).
+let excludedIds        = new Set();
+let lastMergedItems    = null;
+let lastIsBitwarden    = false;
+let rebuildOutputData  = null;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const SENSITIVE = new Set([
@@ -389,6 +400,11 @@ function loadFile(file, n) {
 function resetAll() {
   data[1] = data[2] = null;
   files[1] = files[2] = null;
+  excludedIds = new Set();
+  lastMergedItems = null;
+  rebuildOutputData = null;
+  const exclEl = document.getElementById('exclInfo');
+  if (exclEl) exclEl.textContent = '';
   [1,2].forEach(n => {
     document.getElementById('zone'+n).classList.remove('loaded');
     document.getElementById('fname'+n).textContent = '';
@@ -632,7 +648,12 @@ function flagReusedBwPasswords(items) {
 
 function runBitwarden(items1, items2, policy, strict) {
   const map = new Map();
-  for (const it of items1) { const k=bwSoftKey(it); if(!map.has(k))map.set(k,[]); map.get(k).push(clone(it)); }
+  const file1Items = new Set();
+  for (const it of items1) {
+    const k=bwSoftKey(it); if(!map.has(k))map.set(k,[]);
+    const c=clone(it); map.get(k).push(c); file1Items.add(c);
+  }
+  const touched = new Set();
   const rep = emptyReport(policy, items1.length, items2.length);
 
   for (const it of items2) {
@@ -640,22 +661,23 @@ function runBitwarden(items1, items2, policy, strict) {
     if (!cands.length) {
       map.set(sk,[clone(it)]); rep.stats.new_entries_from_file2++;
       const l=bwLogin(it);
-      rep.new_entries.push({display_name:it.name||'(inget namn)',fields_preview:`user=${l.username||'–'}`,uris:bwUriSet(it,false)});
+      rep.new_entries.push({id:it.id,display_name:it.name||'(inget namn)',fields_preview:`user=${l.username||'–'}`,uris:bwUriSet(it,false)});
       continue;
     }
     let matched=false;
     for (let i=0;i<cands.length;i++) {
-      if (bwExactFP(cands[i])===fp) { rep.stats.exact_duplicates++; matched=true; break; }
+      if (bwExactFP(cands[i])===fp) { touched.add(cands[i]); rep.stats.exact_duplicates++; matched=true; break; }
       const eu=new Set(bwUriSet(cands[i],strict)), iu=new Set(bwUriSet(it,strict));
       const sameUri=[...eu].some(u=>iu.has(u))||(!eu.size&&!iu.size);
       if (sameUri) {
+        touched.add(cands[i]);
         const {merged,diff}=bwMergeItem(cands[i],it,policy,strict);
         cands[i]=merged;
         if (diff.length) {
           const l=bwLogin(cands[i]);
           const nm=(cands[i].name||'(inget namn)')+(l.username?` / ${l.username}`:'');
           rep.stats.merged_entries++;
-          rep.merged_changes.push({display_name:nm,changes:diff});
+          rep.merged_changes.push({id:cands[i].id,display_name:nm,changes:diff});
           if (diff.some(c=>c.decision==='manual')) { rep.stats.conflicted_entries++; rep.manual_review.push({display_name:nm,changes:diff}); }
         }
         matched=true; break;
@@ -664,9 +686,20 @@ function runBitwarden(items1, items2, policy, strict) {
     if (!matched) {
       cands.push(clone(it)); map.set(sk,cands); rep.stats.new_entries_from_file2++;
       const l=bwLogin(it);
-      rep.new_entries.push({display_name:it.name||'(inget namn)',fields_preview:`user=${l.username||'–'}`,uris:bwUriSet(it,false)});
+      rep.new_entries.push({id:it.id,display_name:it.name||'(inget namn)',fields_preview:`user=${l.username||'–'}`,uris:bwUriSet(it,false)});
     }
   }
+
+  for (const lst of map.values()) {
+    for (const it2 of lst) {
+      if (file1Items.has(it2) && !touched.has(it2)) {
+        const l=bwLogin(it2);
+        rep.stats.file1_only_unchanged++;
+        rep.file1_only.push({id:it2.id,display_name:it2.name||'(inget namn)',fields_preview:`user=${l.username||'–'}`,uris:bwUriSet(it2,false)});
+      }
+    }
+  }
+
   return { items:[...map.values()].flat(), report:rep };
 }
 
@@ -728,8 +761,8 @@ function runGeneric(items1, items2, policy, kf, df, extraSens) {
 }
 
 function emptyReport(policy, n1, n2) {
-  return { policy, stats:{file1_items:n1,file2_items:n2,exact_duplicates:0,merged_entries:0,new_entries_from_file2:0,conflicted_entries:0,reused_passwords:0},
-    exact_duplicates:[],merged_changes:[],new_entries:[],manual_review:[] };
+  return { policy, stats:{file1_items:n1,file2_items:n2,exact_duplicates:0,merged_entries:0,new_entries_from_file2:0,conflicted_entries:0,reused_passwords:0,file1_only_unchanged:0},
+    exact_duplicates:[],merged_changes:[],new_entries:[],manual_review:[],file1_only:[] };
 }
 
 // ── Main entry ────────────────────────────────────────────────────────────────
@@ -739,15 +772,17 @@ function runMerge() {
   hideReport();
   showStatus('Merger pågår…', '');
 
-  let mergedItems, report, outputData, modeLbl;
+  let mergedItems, report, modeLbl;
   const d1=data[1], d2=data[2];
+  excludedIds = new Set();
 
   if (isBitwarden(d1) && isBitwarden(d2)) {
     modeLbl = 'Bitwarden / Vaultwarden';
     const r = runBitwarden(d1.items||[], d2.items||[], policy, strict);
     mergedItems = r.items; report = r.report;
     report.stats.reused_passwords = flagReusedBwPasswords(mergedItems);
-    outputData = Object.assign({}, d1, { items: mergedItems });
+    lastIsBitwarden = true;
+    rebuildOutputData = (items) => Object.assign({}, d1, { items });
   } else {
     const arr1 = findItemsArray(d1);
     const arr2 = findItemsArray(d2);
@@ -763,17 +798,16 @@ function runMerge() {
     modeLbl = `Generisk JSON — nyckel: ${kf.join(', ')}`;
     const r = runGeneric(arr1.items, arr2.items, policy, kf, df, extraSens);
     mergedItems = r.items; report = r.report;
-    if (Array.isArray(d1)) outputData = mergedItems;
-    else if (arr1.key) { outputData=Object.assign({},d1); outputData[arr1.key]=mergedItems; }
-    else outputData=mergedItems;
+    lastIsBitwarden = false;
+    rebuildOutputData = (items) => {
+      if (Array.isArray(d1)) return items;
+      if (arr1.key) { const o=Object.assign({},d1); o[arr1.key]=items; return o; }
+      return items;
+    };
   }
 
-  const blob = new Blob([JSON.stringify(outputData, null, 2)], {type:'application/json'});
-  const url  = URL.createObjectURL(blob);
-  const dl   = document.getElementById('downloadBtn');
-  dl.href    = url;
-  dl.download= 'merged_output.json';
-  dl.style.display = 'block';
+  lastMergedItems = mergedItems;
+  updateDownload();
 
   const stats = report.stats;
   document.getElementById('resetBtn').style.display = 'block';
@@ -785,6 +819,33 @@ function runMerge() {
     'ok'
   );
   renderReport(report, mergedItems.length, files[1].name, files[2].name, modeLbl);
+}
+
+function updateDownload() {
+  if (!lastMergedItems || !rebuildOutputData) return;
+  const filtered = lastIsBitwarden
+    ? lastMergedItems.filter(it => !excludedIds.has(it.id))
+    : lastMergedItems;
+  const outputData = rebuildOutputData(filtered);
+  const blob = new Blob([JSON.stringify(outputData, null, 2)], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const dl   = document.getElementById('downloadBtn');
+  if (dl.href && dl.href.startsWith('blob:')) URL.revokeObjectURL(dl.href);
+  dl.href    = url;
+  dl.download= 'merged_output.json';
+  dl.style.display = 'block';
+
+  const excl = document.getElementById('exclInfo');
+  if (excl) excl.textContent = excludedIds.size
+    ? `🗑️ ${excludedIds.size} poster uteslutna från nedladdningen`
+    : '';
+}
+
+function toggleExclude(id, checked) {
+  if (checked) excludedIds.add(id); else excludedIds.delete(id);
+  document.querySelectorAll(`[data-exclude-id="${CSS.escape(String(id))}"]`)
+    .forEach(row => row.classList.toggle('excluded-row', checked));
+  updateDownload();
 }
 
 // ── Status & report rendering ─────────────────────────────────────────────────
@@ -831,7 +892,7 @@ function changeRow(ch) {
 }
 
 function renderReport(report, total, f1, f2, modeLbl) {
-  const stats=report.stats, merged=report.merged_changes, newE=report.new_entries, manual=report.manual_review, dups=report.exact_duplicates;
+  const stats=report.stats, merged=report.merged_changes, newE=report.new_entries, manual=report.manual_review, dups=report.exact_duplicates, f1only=report.file1_only||[];
   const ts=new Date().toLocaleString('sv-SE');
 
   function card(lbl,val,color) {
@@ -859,13 +920,24 @@ function renderReport(report, total, f1, f2, modeLbl) {
       ${rows}</div>`;
   }
 
+  const canExclude = lastIsBitwarden;
+  function exclCb(id) {
+    if (!canExclude || !id) return '';
+    const checked = excludedIds.has(id) ? 'checked' : '';
+    return `<input type="checkbox" class="excl-cb" title="Uteslut från nedladdningen" ${checked} onchange="toggleExclude('${esc(id)}', this.checked)">`;
+  }
+  function exclClass(id) {
+    return (canExclude && id && excludedIds.has(id)) ? ' excluded-row' : '';
+  }
+  const exclTh = canExclude ? '<th style="width:70px">Ta bort</th>' : '';
+
   let mergedHtml='';
   for(const e of merged) {
     const flag=e.changes.some(c=>c.decision==='manual')?' ⚠️':'';
     const types=e.changes.map(c=>c.type).join(' ');
     const inner=e.changes.map(changeRow).join('');
-    mergedHtml+=`<details class="mi" data-name="${esc(e.display_name).toLowerCase()}" data-types="${esc(types)}" style="margin-bottom:5px">
-      <summary class="sdef"><span><strong>${esc(e.display_name)}</strong>${flag}</span><span class="muted sm">${e.changes.length} ändring(ar)</span></summary>
+    mergedHtml+=`<details class="mi${exclClass(e.id)}" data-name="${esc(e.display_name).toLowerCase()}" data-types="${esc(types)}" ${e.id?`data-exclude-id="${esc(e.id)}"`:''} style="margin-bottom:5px">
+      <summary class="sdef"><span>${exclCb(e.id)} <strong>${esc(e.display_name)}</strong>${flag}</span><span class="muted sm">${e.changes.length} ändring(ar)</span></summary>
       <div class="dbody"><table><thead><tr><th>Fält</th><th>Detalj</th><th>Beslut</th></tr></thead><tbody>${inner}</tbody></table></div></details>`;
   }
   if(!mergedHtml) mergedHtml=`<p class="muted center">Inga poster mergades med skillnader.</p>`;
@@ -873,9 +945,16 @@ function renderReport(report, total, f1, f2, modeLbl) {
   let newRows='';
   for(const e of newE) {
     const uris=(e.uris||[]).map(u=>`<a href="${safeHref(u)}" target="_blank" rel="noopener" class="lnk">${esc(u)}</a>`).join(' ')||'–';
-    newRows+=`<tr><td>${esc(e.display_name)}</td><td class="sm muted">${esc(e.fields_preview)}</td><td class="sm muted">${uris}</td></tr>`;
+    newRows+=`<tr class="${exclClass(e.id).trim()}" ${e.id?`data-exclude-id="${esc(e.id)}"`:''}><td>${esc(e.display_name)}</td><td class="sm muted">${esc(e.fields_preview)}</td><td class="sm muted">${uris}</td>${canExclude?`<td>${exclCb(e.id)}</td>`:''}</tr>`;
   }
-  if(!newRows) newRows=`<tr><td colspan="3" class="muted center">Inga nya poster.</td></tr>`;
+  if(!newRows) newRows=`<tr><td colspan="4" class="muted center">Inga nya poster.</td></tr>`;
+
+  let f1onlyRows='';
+  for(const e of f1only) {
+    const uris=(e.uris||[]).map(u=>`<a href="${safeHref(u)}" target="_blank" rel="noopener" class="lnk">${esc(u)}</a>`).join(' ')||'–';
+    f1onlyRows+=`<tr class="${exclClass(e.id).trim()}" ${e.id?`data-exclude-id="${esc(e.id)}"`:''}><td>${esc(e.display_name)}</td><td class="sm muted">${esc(e.fields_preview)}</td><td class="sm muted">${uris}</td>${canExclude?`<td>${exclCb(e.id)}</td>`:''}</tr>`;
+  }
+  if(!f1onlyRows) f1onlyRows=`<tr><td colspan="4" class="muted center">Inga poster bara i fil 1.</td></tr>`;
 
   document.getElementById('report').innerHTML = `
     <div style="color:var(--text-faint);font-size:.82em;margin-bottom:16px">
@@ -888,6 +967,7 @@ function renderReport(report, total, f1, f2, modeLbl) {
       ${card('Exakta kopior',stats.exact_duplicates)}
       ${card('Mergade',stats.merged_entries,stats.merged_entries?'yellow':'default')}
       ${card('Nya från fil 2',stats.new_entries_from_file2,stats.new_entries_from_file2?'green':'default')}
+      ${card('Bara i fil 1',stats.file1_only_unchanged||0)}
       ${card('Kräver review',stats.conflicted_entries,stats.conflicted_entries?'red':'default')}
       ${card('Återanvända lösenord',stats.reused_passwords||0,stats.reused_passwords?'yellow':'default')}
       ${card('Totalt output',total)}
@@ -905,11 +985,19 @@ function renderReport(report, total, f1, f2, modeLbl) {
     <div id="mlist">${mergedHtml}</div>
     <h2>🆕 Nya poster från fil 2 (${newE.length} st)</h2>
     <div class="ntbl"><table>
-      <thead><tr><th>Namn/Nyckel</th><th>Info</th><th>URI(er)</th></tr></thead>
+      <thead><tr><th>Namn/Nyckel</th><th>Info</th><th>URI(er)</th>${exclTh}</tr></thead>
       <tbody>${newRows}</tbody>
     </table></div>
+    <details style="margin-top:20px">
+      <summary class="sdef"><strong>📄 Bara i fil 1, oförändrade (${f1only.length} st)</strong></summary>
+      <div class="ntbl" style="margin-top:8px"><table>
+        <thead><tr><th>Namn/Nyckel</th><th>Info</th><th>URI(er)</th>${exclTh}</tr></thead>
+        <tbody>${f1onlyRows}</tbody>
+      </table></div>
+    </details>
     <div class="footer">
       ✅ <strong>${dups.length}</strong> identiska poster ignorerades. Totalt <strong>${total}</strong> poster i merged-filen.
+      ${canExclude ? '<div class="sm muted" style="margin-top:6px">Kryssa i "Ta bort" på valfri post ovan för att utesluta den från nedladdningen — filen uppdateras direkt, ingen ny merge behövs.</div>' : ''}
     </div>`;
 }
 
